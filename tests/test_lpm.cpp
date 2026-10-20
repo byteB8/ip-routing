@@ -1,3 +1,4 @@
+#include "bspl.h"
 #include "check.h"
 #include "ipv4.h"
 #include "trie.h"
@@ -53,9 +54,23 @@ void fixedCases() {
   CHECK_EQ(route(repeated, "172.20.1.1"), 1);
 }
 
+void bsplStructure() {
+  // Sample table: lengths 16, 24, 28. The /28's search path probes /24 first, which needs a marker
+  // for 192.168.20 there; its best match is the /16.
+  BSPLTable sample(prefixes({"192.168.20.16/28", "192.168.0.0/16", "192.168.1.0/24", "10.10.0.0/16"}));
+  CHECK_EQ(sample.lengthCount(), 3u);
+  CHECK_EQ(sample.entryCount(), 5u);
+  CHECK_EQ(sample.markerCount(), 1u);
+  CHECK_EQ(sample.probes(*parseAddress("192.168.20.20")), 2);   // /24 marker, then the /28
+  CHECK_EQ(sample.probes(*parseAddress("192.168.20.191")), 2);  // /24 marker, a miss at /28
+  CHECK_EQ(sample.probes(*parseAddress("8.8.8.8")), 2);         // misses at /24 and /16
+}
+
 }  // namespace
 
 int main() {
   fixedCases<IPTrie>();
+  fixedCases<BSPLTable>();
+  bsplStructure();
   return report("test_lpm");
 }
