@@ -1,10 +1,10 @@
 #ifndef BSPL_H
 #define BSPL_H
 
+#include "hash_table.h"
 #include "ipv4.h"
 
 #include <cstdint>
-#include <unordered_map>
 #include <vector>
 
 // Longest-prefix match by binary search on prefix lengths (Waldvogel et al., SIGCOMM 1997).
@@ -18,29 +18,30 @@
 // probes for L distinct lengths.
 //
 // The tables are built once from the full prefix list: adding a prefix later can change the markers
-// and best matches of many entries.
-class BSPLTable {
+// and best matches of many entries. Table is the per-length hash table, FlatTable or ChainedTable.
+template <class Table>
+class BasicBSPL {
  public:
   // lookup() returns an index into prefixes. If a prefix appears more than once, the last copy wins.
-  explicit BSPLTable(const std::vector<Prefix> &prefixes);
+  explicit BasicBSPL(const std::vector<Prefix> &prefixes);
 
   int32_t lookup(uint32_t addr) const;  // route of the longest matching prefix, or -1
   int probes(uint32_t addr) const;      // hash probes a lookup of addr makes, for measurement
   size_t lengthCount() const { return lengths_.size(); }
-  size_t entryCount() const;   // real prefixes and markers
-  size_t markerCount() const;  // entries that are markers only
-  size_t bytes() const;        // estimated: hash nodes and bucket arrays, without allocator overhead
+  size_t entryCount() const;  // real prefixes and markers
+  size_t markerCount() const { return markers_; }
+  size_t bytes() const;  // memory of the hash tables
 
  private:
-  struct Entry {
-    int32_t route = -1;      // route of the real prefix with exactly this key and length; -1 for a marker
-    int32_t bestMatch = -1;  // route of the longest real prefix covering this entry; -1 if none
-  };
   // Key of an address in the table for prefix length len: its first len bits.
   static uint32_t key(uint32_t addr, int len) { return len == 0 ? 0u : addr >> (32 - len); }
 
-  std::vector<int> lengths_;                                // distinct prefix lengths, ascending
-  std::vector<std::unordered_map<uint32_t, Entry>> tables_;  // tables_[i] holds keys of length lengths_[i]
+  std::vector<int> lengths_;   // distinct prefix lengths, ascending
+  std::vector<Table> tables_;  // tables_[i] holds the keys of length lengths_[i]
+  size_t markers_ = 0;         // entries that are markers only
 };
+
+using BSPLTable = BasicBSPL<FlatTable>;
+using ChainedBSPLTable = BasicBSPL<ChainedTable>;  // the same search on std::unordered_map, for comparison
 
 #endif

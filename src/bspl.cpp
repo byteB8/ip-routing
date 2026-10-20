@@ -1,9 +1,9 @@
 #include "bspl.h"
 
 #include <array>
-#include <utility>
 
-BSPLTable::BSPLTable(const std::vector<Prefix> &prefixes) {
+template <class Table>
+BasicBSPL<Table>::BasicBSPL(const std::vector<Prefix> &prefixes) {
   std::array<bool, 33> present{};
   for (const Prefix &p : prefixes)
     present[p.len] = true;
@@ -30,7 +30,7 @@ BSPLTable::BSPLTable(const std::vector<Prefix> &prefixes) {
       if (lengths_[mid] == p.len)
         break;
       if (lengths_[mid] < p.len) {
-        tables_[mid].try_emplace(key(p.addr, lengths_[mid]));
+        tables_[mid][key(p.addr, lengths_[mid])];  // adds a marker unless the key is already there
         lo = mid + 1;
       } else {
         hi = mid - 1;
@@ -41,25 +41,27 @@ BSPLTable::BSPLTable(const std::vector<Prefix> &prefixes) {
   // Best matches: for every entry, the longest real prefix at its own length or a shorter one that
   // covers it.
   for (size_t i = 0; i < tables_.size(); ++i)
-    for (auto &[k, entry] : tables_[i])
+    tables_[i].forEach([&](uint32_t k, BSPLEntry &entry) {
+      markers_ += entry.route < 0;
       for (int j = static_cast<int>(i); j >= 0; --j) {
         uint32_t shorter = lengths_[j] == 0 ? 0u : k >> (lengths_[i] - lengths_[j]);
-        auto it = tables_[j].find(shorter);
-        if (it != tables_[j].end() && it->second.route >= 0) {
-          entry.bestMatch = it->second.route;
+        const BSPLEntry *e = tables_[j].find(shorter);
+        if (e && e->route >= 0) {
+          entry.bestMatch = e->route;
           break;
         }
       }
+    });
 }
 
-int32_t BSPLTable::lookup(uint32_t addr) const {
+template <class Table>
+int32_t BasicBSPL<Table>::lookup(uint32_t addr) const {
   int32_t best = -1;
   int lo = 0, hi = static_cast<int>(lengths_.size()) - 1;
   while (lo <= hi) {
     int mid = (lo + hi) / 2;
-    auto it = tables_[mid].find(key(addr, lengths_[mid]));
-    if (it != tables_[mid].end()) {
-      best = it->second.bestMatch;
+    if (const BSPLEntry *e = tables_[mid].find(key(addr, lengths_[mid]))) {
+      best = e->bestMatch;
       lo = mid + 1;
     } else {
       hi = mid - 1;
@@ -68,13 +70,14 @@ int32_t BSPLTable::lookup(uint32_t addr) const {
   return best;
 }
 
-int BSPLTable::probes(uint32_t addr) const {
+template <class Table>
+int BasicBSPL<Table>::probes(uint32_t addr) const {
   int count = 0;
   int lo = 0, hi = static_cast<int>(lengths_.size()) - 1;
   while (lo <= hi) {
     int mid = (lo + hi) / 2;
     ++count;
-    if (tables_[mid].count(key(addr, lengths_[mid])))
+    if (tables_[mid].find(key(addr, lengths_[mid])))
       lo = mid + 1;
     else
       hi = mid - 1;
@@ -82,27 +85,21 @@ int BSPLTable::probes(uint32_t addr) const {
   return count;
 }
 
-size_t BSPLTable::entryCount() const {
+template <class Table>
+size_t BasicBSPL<Table>::entryCount() const {
   size_t n = 0;
-  for (const auto &table : tables_)
+  for (const Table &table : tables_)
     n += table.size();
   return n;
 }
 
-size_t BSPLTable::markerCount() const {
+template <class Table>
+size_t BasicBSPL<Table>::bytes() const {
   size_t n = 0;
-  for (const auto &table : tables_)
-    for (const auto &kv : table)
-      n += kv.second.route < 0;
+  for (const Table &table : tables_)
+    n += table.bytes();
   return n;
 }
 
-size_t BSPLTable::bytes() const {
-  // A hash node holds a next pointer and the key/entry pair, padded to pointer alignment.
-  constexpr size_t align = alignof(void *);
-  constexpr size_t node = (sizeof(void *) + sizeof(std::pair<const uint32_t, Entry>) + align - 1) / align * align;
-  size_t total = 0;
-  for (const auto &table : tables_)
-    total += table.bucket_count() * sizeof(void *) + table.size() * node;
-  return total;
-}
+template class BasicBSPL<FlatTable>;
+template class BasicBSPL<ChainedTable>;

@@ -56,10 +56,11 @@ void fixedCases() {
   CHECK_EQ(route(repeated, "172.20.1.1"), 1);
 }
 
+template <class Table>
 void bsplStructure() {
   // Sample table: lengths 16, 24, 28. The /28's search path probes /24 first, which needs a marker
   // for 192.168.20 there; its best match is the /16.
-  BSPLTable sample(prefixes({"192.168.20.16/28", "192.168.0.0/16", "192.168.1.0/24", "10.10.0.0/16"}));
+  Table sample(prefixes({"192.168.20.16/28", "192.168.0.0/16", "192.168.1.0/24", "10.10.0.0/16"}));
   CHECK_EQ(sample.lengthCount(), 3u);
   CHECK_EQ(sample.entryCount(), 5u);
   CHECK_EQ(sample.markerCount(), 1u);
@@ -119,7 +120,7 @@ std::vector<uint32_t> randomQueries(std::mt19937 &rng, const std::vector<Prefix>
   return out;
 }
 
-// Both tables must agree with the linear scan on every address, and a BSPL lookup must take at most
+// Every table must agree with the linear scan on every address, and a BSPL lookup must take at most
 // ceil(log2(L + 1)) probes for L distinct prefix lengths.
 void differential() {
   std::mt19937 rng(20261020);
@@ -129,12 +130,13 @@ void differential() {
     std::vector<Prefix> table = randomTable(rng, n);
     IPTrie trie(table);
     BSPLTable bspl(table);
+    ChainedBSPLTable chained(table);
     int probeLimit = 0;
     while ((1u << probeLimit) < bspl.lengthCount() + 1)
       ++probeLimit;
     for (uint32_t addr : randomQueries(rng, table, 1000)) {
       int32_t want = linearLookup(table, addr);
-      mismatches += (trie.lookup(addr) != want) + (bspl.lookup(addr) != want);
+      mismatches += (trie.lookup(addr) != want) + (bspl.lookup(addr) != want) + (chained.lookup(addr) != want);
       overProbes += bspl.probes(addr) > probeLimit;
       ++addresses;
     }
@@ -143,7 +145,7 @@ void differential() {
   CHECK_EQ(mismatches, 0u);
   CHECK_EQ(overProbes, 0u);
   std::cout << "differential: " << addresses << " addresses on " << tables
-            << " random tables, each looked up in both tables: " << mismatches << " mismatches\n";
+            << " random tables, each looked up in all three tables: " << mismatches << " mismatches\n";
 }
 
 }  // namespace
@@ -151,7 +153,9 @@ void differential() {
 int main() {
   fixedCases<IPTrie>();
   fixedCases<BSPLTable>();
-  bsplStructure();
+  fixedCases<ChainedBSPLTable>();
+  bsplStructure<BSPLTable>();
+  bsplStructure<ChainedBSPLTable>();
   differential();
   return report("test_lpm");
 }

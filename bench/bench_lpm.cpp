@@ -1,4 +1,5 @@
-// Lookup benchmark for the binary trie and BSPL on a routing table and on random subsets of it.
+// Lookup benchmark for the binary trie and BSPL (open addressing and std::unordered_map) on a routing
+// table and on random subsets of it.
 //
 //   bench_lpm <table.csv> <out_dir>
 //
@@ -158,13 +159,17 @@ int main(int argc, char **argv) {
       for (size_t i = 0; i < n; ++i)
         table.push_back(full[order[i]]);
     }
-    double trieMs, bsplMs;
+    double trieMs, flatMs, chainedMs;
     IPTrie trie = build<IPTrie>(table, trieMs);
-    BSPLTable bspl = build<BSPLTable>(table, bsplMs);
-    memoryCsv << n << ",trie," << trie.nodeCount() << ",0," << trie.bytes() << "," << double(trie.bytes()) / n
-              << "," << trieMs << "\n";
-    memoryCsv << n << ",bspl," << bspl.entryCount() << "," << bspl.markerCount() << "," << bspl.bytes() << ","
-              << double(bspl.bytes()) / n << "," << bsplMs << "\n";
+    BSPLTable flat = build<BSPLTable>(table, flatMs);
+    ChainedBSPLTable chained = build<ChainedBSPLTable>(table, chainedMs);
+    auto memoryRow = [&](const char *structure, size_t items, size_t markers, size_t bytes, double ms) {
+      memoryCsv << n << "," << structure << "," << items << "," << markers << "," << bytes << ","
+                << double(bytes) / n << "," << ms << "\n";
+    };
+    memoryRow("trie", trie.nodeCount(), 0, trie.bytes(), trieMs);
+    memoryRow("bspl_flat", flat.entryCount(), flat.markerCount(), flat.bytes(), flatMs);
+    memoryRow("bspl_chained", chained.entryCount(), chained.markerCount(), chained.bytes(), chainedMs);
 
     std::vector<std::pair<std::string, std::vector<uint32_t>>> addressSets;
     addressSets.emplace_back("routed", routedAddresses(table, rng));
@@ -180,15 +185,17 @@ int main(int argc, char **argv) {
       };
       row("trie", "independent", measure([&] { return independentPass(trie, addrs); }));
       row("trie", "dependent", measure([&] { return dependentPass(trie, addrs); }));
-      row("bspl", "independent", measure([&] { return independentPass(bspl, addrs); }));
-      row("bspl", "dependent", measure([&] { return dependentPass(bspl, addrs); }));
+      row("bspl_flat", "independent", measure([&] { return independentPass(flat, addrs); }));
+      row("bspl_flat", "dependent", measure([&] { return dependentPass(flat, addrs); }));
+      row("bspl_chained", "independent", measure([&] { return independentPass(chained, addrs); }));
+      row("bspl_chained", "dependent", measure([&] { return dependentPass(chained, addrs); }));
 
       if (n == full.size()) {
         std::map<int, size_t> trieSteps, bsplSteps;
         size_t matched = 0;
         for (uint32_t a : addrs) {
           ++trieSteps[trie.nodesVisited(a)];
-          ++bsplSteps[bspl.probes(a)];
+          ++bsplSteps[flat.probes(a)];  // both BSPL tables probe the same lengths
           matched += trie.lookup(a) >= 0;
         }
         for (const auto &[steps, count] : trieSteps)
@@ -199,8 +206,10 @@ int main(int argc, char **argv) {
       }
     }
     std::cout << "  trie: " << trie.nodeCount() << " nodes, " << trie.bytes() / 1e6 << " MB, built in " << trieMs
-              << " ms; bspl: " << bspl.lengthCount() << " lengths, " << bspl.entryCount() << " entries ("
-              << bspl.markerCount() << " markers), " << bspl.bytes() / 1e6 << " MB, built in " << bsplMs << " ms\n";
+              << " ms\n  bspl: " << flat.lengthCount() << " lengths, " << flat.entryCount() << " entries ("
+              << flat.markerCount() << " markers); open addressing " << flat.bytes() / 1e6 << " MB, built in "
+              << flatMs << " ms; std::unordered_map " << chained.bytes() / 1e6 << " MB, built in " << chainedMs
+              << " ms\n";
   }
 
   std::ofstream env(out + "/environment.txt");
