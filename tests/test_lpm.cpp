@@ -4,6 +4,8 @@
 #include "trie.h"
 
 #include <initializer_list>
+#include <iostream>
+#include <random>
 #include <vector>
 
 namespace {
@@ -66,11 +68,90 @@ void bsplStructure() {
   CHECK_EQ(sample.probes(*parseAddress("8.8.8.8")), 2);         // misses at /24 and /16
 }
 
+// Reference answer: scan every prefix and keep the longest that contains the address
+// (for a repeated prefix, the last copy).
+int32_t linearLookup(const std::vector<Prefix> &table, uint32_t addr) {
+  int32_t best = -1;
+  for (size_t i = 0; i < table.size(); ++i)
+    if (contains(table[i], addr) && (best < 0 || table[i].len >= table[best].len))
+      best = static_cast<int32_t>(i);
+  return best;
+}
+
+uint32_t random32(std::mt19937 &rng) { return static_cast<uint32_t>(rng()); }
+
+// A random table where most prefixes are derived from one already present, either nested under it
+// or covering it, so deep chains of nested prefixes, siblings and repeats are common. A quarter of
+// the tables also get a default route.
+std::vector<Prefix> randomTable(std::mt19937 &rng, size_t n) {
+  std::uniform_int_distribution<int> anyLen(1, 32);
+  std::vector<Prefix> table;
+  while (table.size() < n) {
+    int len = anyLen(rng);
+    if (table.empty() || rng() % 4 == 0) {
+      table.push_back({random32(rng) & mask(len), len});
+    } else {
+      const Prefix base = table[rng() % table.size()];
+      uint32_t addr = len > base.len ? base.addr | (random32(rng) & ~mask(base.len)) : base.addr;
+      table.push_back({addr & mask(len), len});
+    }
+  }
+  if (rng() % 4 == 0)
+    table[rng() % table.size()] = Prefix{0, 0};
+  return table;
+}
+
+// Addresses to look up: uniform ones, ones inside the table's prefixes, and the first address, last
+// address and the address after the last of a prefix, where off-by-one mistakes show.
+std::vector<uint32_t> randomQueries(std::mt19937 &rng, const std::vector<Prefix> &table, size_t n) {
+  std::vector<uint32_t> out;
+  while (out.size() < n) {
+    const Prefix &p = table[rng() % table.size()];
+    switch (rng() % 4) {
+      case 0: out.push_back(random32(rng)); break;
+      case 1: out.push_back(p.addr | (random32(rng) & ~mask(p.len))); break;
+      case 2: out.push_back(p.addr); break;
+      default:
+        out.push_back(p.addr | ~mask(p.len));
+        out.push_back((p.addr | ~mask(p.len)) + 1);  // wraps to 0.0.0.0 after 255.255.255.255
+    }
+  }
+  return out;
+}
+
+// Both tables must agree with the linear scan on every address, and a BSPL lookup must take at most
+// ceil(log2(L + 1)) probes for L distinct prefix lengths.
+void differential() {
+  std::mt19937 rng(20261020);
+  size_t tables = 0, addresses = 0, mismatches = 0, overProbes = 0;
+  for (int t = 0; t < 1000; ++t) {
+    size_t n = 1 + rng() % (t < 500 ? 16 : 1000);  // small tables reach corner cases; large ones nest deeply
+    std::vector<Prefix> table = randomTable(rng, n);
+    IPTrie trie(table);
+    BSPLTable bspl(table);
+    int probeLimit = 0;
+    while ((1u << probeLimit) < bspl.lengthCount() + 1)
+      ++probeLimit;
+    for (uint32_t addr : randomQueries(rng, table, 1000)) {
+      int32_t want = linearLookup(table, addr);
+      mismatches += (trie.lookup(addr) != want) + (bspl.lookup(addr) != want);
+      overProbes += bspl.probes(addr) > probeLimit;
+      ++addresses;
+    }
+    ++tables;
+  }
+  CHECK_EQ(mismatches, 0u);
+  CHECK_EQ(overProbes, 0u);
+  std::cout << "differential: " << addresses << " addresses on " << tables
+            << " random tables, each looked up in both tables: " << mismatches << " mismatches\n";
+}
+
 }  // namespace
 
 int main() {
   fixedCases<IPTrie>();
   fixedCases<BSPLTable>();
   bsplStructure();
+  differential();
   return report("test_lpm");
 }
