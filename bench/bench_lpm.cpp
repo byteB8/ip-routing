@@ -4,9 +4,11 @@
 //   bench_lpm <table.csv> <out_dir>
 //
 // Writes lookup.csv, memory.csv, steps.csv and environment.txt to out_dir and prints a summary.
-// A timing is the median of five passes over 1M addresses, after one warm-up pass. In an
-// "independent" pass the CPU can overlap consecutive lookups; in a "dependent" pass each lookup's
-// address depends on the previous result, so the pass measures the latency of one lookup.
+// A timing is the median of 11 passes over 1M addresses, after one warm-up pass. The passes of the
+// three structures are interleaved, so slow spells of the machine (clock changes, other processes)
+// hit all three alike. In an "independent" pass the CPU can overlap consecutive lookups; in a
+// "dependent" pass each lookup's address depends on the previous result, so the pass measures the
+// latency of one lookup.
 #include "bspl.h"
 #include "ipv4.h"
 #include "routing_table.h"
@@ -16,6 +18,7 @@
 #include <array>
 #include <chrono>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <numeric>
@@ -26,7 +29,7 @@
 namespace {
 
 constexpr size_t kLookups = 1'000'000;
-constexpr int kRuns = 5;
+constexpr int kRounds = 11;
 using Clock = std::chrono::steady_clock;
 
 volatile uint32_t zeroAtRunTime = 0;  // always 0, but the compiler cannot assume it
@@ -36,14 +39,23 @@ struct Timing {
   double median, min, max;
 };
 
-template <class Pass>
-Timing measure(Pass pass) {
-  pass();
-  std::array<double, kRuns> ns;
-  for (double &t : ns)
-    t = pass();
-  std::sort(ns.begin(), ns.end());
-  return {ns[kRuns / 2], ns.front(), ns.back()};
+// Runs each pass once to warm up, then kRounds times, one pass of each per round in rotating order.
+std::vector<Timing> measureInterleaved(const std::vector<std::function<double()>> &passes) {
+  const size_t n = passes.size();
+  std::vector<std::vector<double>> ns(n);
+  for (const auto &pass : passes)
+    pass();
+  for (int round = 0; round < kRounds; ++round)
+    for (size_t i = 0; i < n; ++i) {
+      size_t which = (round + i) % n;
+      ns[which].push_back(passes[which]());
+    }
+  std::vector<Timing> timings;
+  for (auto &v : ns) {
+    std::sort(v.begin(), v.end());
+    timings.push_back({v[v.size() / 2], v.front(), v.back()});
+  }
+  return timings;
 }
 
 double elapsedNs(Clock::time_point start) {
@@ -183,12 +195,17 @@ int main(int argc, char **argv) {
         std::cout << n << " routes, " << structure << ", " << kind << ", " << mode << ": " << t.median
                   << " ns/lookup\n";
       };
-      row("trie", "independent", measure([&] { return independentPass(trie, addrs); }));
-      row("trie", "dependent", measure([&] { return dependentPass(trie, addrs); }));
-      row("bspl_flat", "independent", measure([&] { return independentPass(flat, addrs); }));
-      row("bspl_flat", "dependent", measure([&] { return dependentPass(flat, addrs); }));
-      row("bspl_chained", "independent", measure([&] { return independentPass(chained, addrs); }));
-      row("bspl_chained", "dependent", measure([&] { return dependentPass(chained, addrs); }));
+      auto independent = measureInterleaved({[&] { return independentPass(trie, addrs); },
+                                             [&] { return independentPass(flat, addrs); },
+                                             [&] { return independentPass(chained, addrs); }});
+      auto dependent = measureInterleaved({[&] { return dependentPass(trie, addrs); },
+                                           [&] { return dependentPass(flat, addrs); },
+                                           [&] { return dependentPass(chained, addrs); }});
+      const char *names[] = {"trie", "bspl_flat", "bspl_chained"};
+      for (int i = 0; i < 3; ++i)
+        row(names[i], "independent", independent[i]);
+      for (int i = 0; i < 3; ++i)
+        row(names[i], "dependent", dependent[i]);
 
       if (n == full.size()) {
         std::map<int, size_t> trieSteps, bsplSteps;
@@ -214,7 +231,7 @@ int main(int argc, char **argv) {
 
   std::ofstream env(out + "/environment.txt");
   env << "cpu: " << cpuModel() << "\ncompiler: g++ " << __VERSION__ << "\ntable: " << argv[1] << " ("
-      << full.size() << " prefixes)\nlookups per pass: " << kLookups << ", passes: " << kRuns
-      << " after one warm-up, median reported\n";
+      << full.size() << " prefixes)\nlookups per pass: " << kLookups << ", passes: " << kRounds
+      << " per structure after one warm-up, interleaved across structures, median reported\n";
   std::cout << "checksum " << sink << "\n";
 }
