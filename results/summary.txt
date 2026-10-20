@@ -1,0 +1,65 @@
+1000 routes, trie, routed, independent: 64.3741 ns/lookup
+1000 routes, bspl_flat, routed, independent: 37.1798 ns/lookup
+1000 routes, bspl_chained, routed, independent: 57.6412 ns/lookup
+1000 routes, trie, routed, dependent: 67.1944 ns/lookup
+1000 routes, bspl_flat, routed, dependent: 40.3567 ns/lookup
+1000 routes, bspl_chained, routed, dependent: 66.5112 ns/lookup
+  trie: 13037 nodes, 0.156444 MB, built in 0.095017 ms
+  bspl: 14 lengths, 2708 entries (1708 markers); open addressing 0.086976 MB, built in 0.265435 ms; std::unordered_map 0.09624 MB, built in 0.357773 ms
+3000 routes, trie, routed, independent: 76.1941 ns/lookup
+3000 routes, bspl_flat, routed, independent: 43.0643 ns/lookup
+3000 routes, bspl_chained, routed, independent: 69.0592 ns/lookup
+3000 routes, trie, routed, dependent: 78.062 ns/lookup
+3000 routes, bspl_flat, routed, dependent: 48.218 ns/lookup
+3000 routes, bspl_chained, routed, dependent: 76.8927 ns/lookup
+  trie: 33292 nodes, 0.399504 MB, built in 0.305534 ms
+  bspl: 15 lengths, 6164 entries (3164 markers); open addressing 0.20544 MB, built in 0.504442 ms; std::unordered_map 0.227816 MB, built in 0.736483 ms
+10000 routes, trie, routed, independent: 87.1572 ns/lookup
+10000 routes, bspl_flat, routed, independent: 58.3731 ns/lookup
+10000 routes, bspl_chained, routed, independent: 101.422 ns/lookup
+10000 routes, trie, routed, dependent: 88.6044 ns/lookup
+10000 routes, bspl_flat, routed, dependent: 59.4744 ns/lookup
+10000 routes, bspl_chained, routed, dependent: 117.416 ns/lookup
+  trie: 90345 nodes, 1.08414 MB, built in 1.01328 ms
+  bspl: 19 lengths, 33653 entries (23653 markers); open addressing 1.25376 MB, built in 4.96052 ms; std::unordered_map 1.15824 MB, built in 7.89078 ms
+30000 routes, trie, routed, independent: 99.2634 ns/lookup
+30000 routes, bspl_flat, routed, independent: 62.9519 ns/lookup
+30000 routes, bspl_chained, routed, independent: 121.663 ns/lookup
+30000 routes, trie, routed, dependent: 119.631 ns/lookup
+30000 routes, bspl_flat, routed, dependent: 80.1347 ns/lookup
+30000 routes, bspl_chained, routed, dependent: 186.483 ns/lookup
+  trie: 215057 nodes, 2.58068 MB, built in 3.19063 ms
+  bspl: 20 lengths, 98177 entries (68177 markers); open addressing 3.38899 MB, built in 12.6307 ms; std::unordered_map 3.6135 MB, built in 22.0167 ms
+100000 routes, trie, routed, independent: 191.428 ns/lookup
+100000 routes, bspl_flat, routed, independent: 108.174 ns/lookup
+100000 routes, bspl_chained, routed, independent: 318.305 ns/lookup
+100000 routes, trie, routed, dependent: 204.173 ns/lookup
+100000 routes, bspl_flat, routed, dependent: 129.649 ns/lookup
+100000 routes, bspl_chained, routed, dependent: 432.64 ns/lookup
+  trie: 527051 nodes, 6.32461 MB, built in 16.4724 ms
+  bspl: 23 lengths, 290418 entries (190418 markers); open addressing 10.3622 MB, built in 50.2538 ms; std::unordered_map 9.95342 MB, built in 124.151 ms
+300000 routes, trie, routed, independent: 319.732 ns/lookup
+300000 routes, bspl_flat, routed, independent: 136.44 ns/lookup
+300000 routes, bspl_chained, routed, independent: 378.556 ns/lookup
+300000 routes, trie, routed, dependent: 343.376 ns/lookup
+300000 routes, bspl_flat, routed, dependent: 179.633 ns/lookup
+300000 routes, bspl_chained, routed, dependent: 525.73 ns/lookup
+  trie: 1117644 nodes, 13.4117 MB, built in 78.7414 ms
+  bspl: 25 lengths, 627539 entries (327539 markers); open addressing 19.4579 MB, built in 109.306 ms; std::unordered_map 23.5019 MB, built in 413.742 ms
+1125729 routes, trie, routed, independent: 362.918 ns/lookup
+1125729 routes, bspl_flat, routed, independent: 139.244 ns/lookup
+1125729 routes, bspl_chained, routed, independent: 399.463 ns/lookup
+1125729 routes, trie, routed, dependent: 325.852 ns/lookup
+1125729 routes, bspl_flat, routed, dependent: 191.385 ns/lookup
+1125729 routes, bspl_chained, routed, dependent: 517.665 ns/lookup
+  routed addresses with a route: 100%
+1125729 routes, trie, uniform, independent: 149.614 ns/lookup
+1125729 routes, bspl_flat, uniform, independent: 127.118 ns/lookup
+1125729 routes, bspl_chained, uniform, independent: 339.654 ns/lookup
+1125729 routes, trie, uniform, dependent: 138.74 ns/lookup
+1125729 routes, bspl_flat, uniform, dependent: 128.503 ns/lookup
+1125729 routes, bspl_chained, uniform, dependent: 347.136 ns/lookup
+  uniform addresses with a route: 72.8527%
+  trie: 2463217 nodes, 29.5586 MB, built in 91.3523 ms
+  bspl: 25 lengths, 1796374 entries (670645 markers); open addressing 69.3754 MB, built in 303.524 ms; std::unordered_map 67.2525 MB, built in 651.896 ms
+checksum 84030970009413078
